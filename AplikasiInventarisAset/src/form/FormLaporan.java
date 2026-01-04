@@ -1,4 +1,5 @@
 package form;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.sql.*;
@@ -7,88 +8,145 @@ import javax.swing.JOptionPane;
 import java.awt.print.PrinterException;
 import java.text.MessageFormat;
 import javax.swing.JTable;
+import javax.swing.table.DefaultTableModel;
 
 public class FormLaporan extends javax.swing.JFrame {
 
+    // Tambahkan variabel JTable untuk preview
+    private javax.swing.JTable tabelPreview;
+    private javax.swing.JScrollPane scrollPreview;
+
     public FormLaporan() {
         initComponents();
+        // Default load preview aset
+        loadPreviewAset();
     }
-private void exportToExcel(String query, String filename) {
-    JFileChooser fileChooser = new JFileChooser();
-    fileChooser.setSelectedFile(new File(filename + ".xls"));
-    int userSelection = fileChooser.showSaveDialog(this);
 
-    if (userSelection == JFileChooser.APPROVE_OPTION) {
-        try (FileWriter fw = new FileWriter(fileChooser.getSelectedFile())) {
+    // ==================== METHOD PREVIEW ====================
+    private void loadPreviewAset() {
+        try {
+            DefaultTableModel model = new DefaultTableModel();
+            model.addColumn("ID");
+            model.addColumn("Nama Aset");
+            model.addColumn("Kategori");
+            model.addColumn("Status");
+
+            Connection c = koneksi.Koneksi.getKoneksi();
+            Statement s = c.createStatement();
+            ResultSet rs = s.executeQuery("SELECT id_aset, nama_aset, kategori, status FROM tbl_aset");
+
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                    rs.getInt("id_aset"),
+                    rs.getString("nama_aset"),
+                    rs.getString("kategori"),
+                    rs.getString("status")
+                });
+            }
+            tabelPreview.setModel(model);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error load preview: " + e.getMessage());
+        }
+    }
+
+    private void loadPreviewPeminjaman() {
+        try {
+            DefaultTableModel model = new DefaultTableModel();
+            model.addColumn("ID");
+            model.addColumn("Aset");
+            model.addColumn("Pegawai");
+            model.addColumn("Tgl Pinjam");
+            model.addColumn("Status");
+
+            Connection c = koneksi.Koneksi.getKoneksi();
+            Statement s = c.createStatement();
+            ResultSet rs = s.executeQuery(
+                "SELECT p.id_peminjaman, a.nama_aset, pg.nama_pegawai, p.tgl_pinjam, p.status " +
+                "FROM tbl_peminjaman p " +
+                "JOIN tbl_aset a ON p.id_aset = a.id_aset " +
+                "JOIN tbl_pegawai pg ON p.id_pegawai = pg.id_pegawai"
+            );
+
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                    rs.getInt("id_peminjaman"),
+                    rs.getString("nama_aset"),
+                    rs.getString("nama_pegawai"),
+                    rs.getString("tgl_pinjam"),
+                    rs.getString("status")
+                });
+            }
+            tabelPreview.setModel(model);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error load preview: " + e.getMessage());
+        }
+    }
+     // ==================== EXPORT ====================
+    private void exportToExcel(String query, String filename) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setSelectedFile(new File(filename + ".xls"));
+        int userSelection = fileChooser.showSaveDialog(this);
+
+        if (userSelection == JFileChooser.APPROVE_OPTION) {
+            try (FileWriter fw = new FileWriter(fileChooser.getSelectedFile())) {
+                Connection c = koneksi.Koneksi.getKoneksi();
+                Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery(query);
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+
+                // Tulis Header
+                for (int i = 1; i <= columnCount; i++) {
+                    fw.write(metaData.getColumnName(i) + "\t");
+                }
+                fw.write("\n");
+
+                // Tulis Data
+                while (rs.next()) {
+                    for (int i = 1; i <= columnCount; i++) {
+                        fw.write(rs.getString(i) + "\t");
+                    }
+                    fw.write("\n");
+                }
+                JOptionPane.showMessageDialog(this, "Export Excel Berhasil!");
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+            }
+        }
+    }
+
+    private void exportToPDF(String query, String title) {
+        try {
             Connection c = koneksi.Koneksi.getKoneksi();
             Statement s = c.createStatement();
             ResultSet rs = s.executeQuery(query);
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
 
-            // Tulis Header
+            DefaultTableModel model = new DefaultTableModel();
             for (int i = 1; i <= columnCount; i++) {
-                fw.write(metaData.getColumnName(i) + "\t");
+                model.addColumn(metaData.getColumnLabel(i));
             }
-            fw.write("\n");
-
-            // Tulis Data
             while (rs.next()) {
+                Object[] row = new Object[columnCount];
                 for (int i = 1; i <= columnCount; i++) {
-                    fw.write(rs.getString(i) + "\t");
+                    row[i - 1] = rs.getObject(i);
                 }
-                fw.write("\n");
+                model.addRow(row);
             }
-            JOptionPane.showMessageDialog(this, "Export Excel Berhasil!");
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+
+            JTable tempTable = new JTable(model);
+            MessageFormat header = new MessageFormat(title);
+            MessageFormat footer = new MessageFormat("Halaman {0}");
+            boolean complete = tempTable.print(JTable.PrintMode.FIT_WIDTH, header, footer);
+
+            if (complete) {
+                JOptionPane.showMessageDialog(this, "Proses Cetak Selesai");
+            }
+        } catch (PrinterException | SQLException e) {
+            JOptionPane.showMessageDialog(this, "Gagal mencetak: " + e.getMessage());
         }
     }
-}
-private void exportToPDF(String query, String title) {
-    try {
-        // 1. Ambil data dari Database
-        Connection c = koneksi.Koneksi.getKoneksi();
-        Statement s = c.createStatement();
-        ResultSet rs = s.executeQuery(query);
-        ResultSetMetaData metaData = rs.getMetaData();
-        int columnCount = metaData.getColumnCount();
-
-        // 2. Masukkan ke DefaultTableModel
-        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel();
-        for (int i = 1; i <= columnCount; i++) {
-            model.addColumn(metaData.getColumnLabel(i));
-        }
-        while (rs.next()) {
-            Object[] row = new Object[columnCount];
-            for (int i = 1; i <= columnCount; i++) {
-                row[i - 1] = rs.getObject(i);
-            }
-            model.addRow(row);
-        }
-
-        // 3. Gunakan JTable sementara untuk proses Print
-        JTable tempTable = new JTable(model);
-        
-        // 4. Konfigurasi Header dan Footer PDF
-        MessageFormat header = new MessageFormat(title);
-        MessageFormat footer = new MessageFormat("Halaman {0}");
-
-        // 5. Eksekusi Print (Pilih 'Save as PDF' di dialog printer)
-        boolean complete = tempTable.print(JTable.PrintMode.FIT_WIDTH, header, footer);
-        
-        if (complete) {
-            JOptionPane.showMessageDialog(this, "Proses Cetak Selesai");
-        }
-    } catch (PrinterException | SQLException e) {
-        JOptionPane.showMessageDialog(this, "Gagal mencetak: " + e.getMessage());
-    }
-}
-    /**
-     * This method is called from within the constructor to initialize the form.
-     * WARNING: Do NOT modify this code. The content of this method is always
-     * regenerated by the Form Editor.
-     */
     @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
@@ -97,9 +155,13 @@ private void exportToPDF(String query, String title) {
         btnExportPeminjaman = new javax.swing.JButton();
         jPanel1 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
+        jLabel2 = new javax.swing.JLabel();
+        jButton1 = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
+        btnExportAset.setBackground(new java.awt.Color(153, 153, 255));
+        btnExportAset.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
         btnExportAset.setText("Export Aset");
         btnExportAset.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -107,6 +169,8 @@ private void exportToPDF(String query, String title) {
             }
         });
 
+        btnExportPeminjaman.setBackground(new java.awt.Color(204, 204, 255));
+        btnExportPeminjaman.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
         btnExportPeminjaman.setText("Export Peminjaman");
         btnExportPeminjaman.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -116,7 +180,7 @@ private void exportToPDF(String query, String title) {
 
         jPanel1.setBorder(javax.swing.BorderFactory.createEtchedBorder());
 
-        jLabel1.setFont(new java.awt.Font("Tahoma", 0, 18)); // NOI18N
+        jLabel1.setFont(new java.awt.Font("Tahoma", 1, 24)); // NOI18N
         jLabel1.setText("FORM LAPORAN");
 
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
@@ -136,30 +200,53 @@ private void exportToPDF(String query, String title) {
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
+        jLabel2.setIcon(new javax.swing.ImageIcon(getClass().getResource("/form/ikon/1.png"))); // NOI18N
+
+        jButton1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/form/ikon/kembali.png"))); // NOI18N
+        jButton1.setText("kembali");
+        jButton1.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton1ActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(18, 18, 18))
-            .addGroup(layout.createSequentialGroup()
-                .addGap(98, 98, 98)
+                .addContainerGap()
+                .addComponent(jLabel2)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(btnExportPeminjaman, javax.swing.GroupLayout.PREFERRED_SIZE, 317, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(btnExportAset, javax.swing.GroupLayout.PREFERRED_SIZE, 317, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addGap(0, 0, Short.MAX_VALUE))
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
+                        .addComponent(btnExportAset, javax.swing.GroupLayout.PREFERRED_SIZE, 209, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(26, 26, 26)
+                        .addComponent(btnExportPeminjaman, javax.swing.GroupLayout.PREFERRED_SIZE, 220, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jPanel1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addContainerGap(54, Short.MAX_VALUE))
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jButton1)
+                .addGap(71, 71, 71))
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(18, 18, 18)
-                .addComponent(btnExportAset)
-                .addGap(18, 18, 18)
-                .addComponent(btnExportPeminjaman)
-                .addGap(0, 36, Short.MAX_VALUE))
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(layout.createSequentialGroup()
+                        .addGap(7, 7, 7)
+                        .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                            .addComponent(btnExportAset, javax.swing.GroupLayout.DEFAULT_SIZE, 212, Short.MAX_VALUE)
+                            .addComponent(btnExportPeminjaman, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                    .addGroup(layout.createSequentialGroup()
+                        .addGap(44, 44, 44)
+                        .addComponent(jLabel2)))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 9, Short.MAX_VALUE)
+                .addComponent(jButton1)
+                .addContainerGap())
         );
 
         pack();
@@ -196,45 +283,21 @@ private void exportToPDF(String query, String title) {
     }
     }//GEN-LAST:event_btnExportPeminjamanActionPerformed
 
+    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
+        dispose();// TODO add your handling code here:
+    }//GEN-LAST:event_jButton1ActionPerformed
+
     /**
      * @param args the command line arguments
      */
-    public static void main(String args[]) {
-        /* Set the Nimbus look and feel */
-        //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
-        /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
-         * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html 
-         */
-        try {
-            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
-                if ("Nimbus".equals(info.getName())) {
-                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
-                    break;
-                }
-            }
-        } catch (ClassNotFoundException ex) {
-            java.util.logging.Logger.getLogger(FormLaporan.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (InstantiationException ex) {
-            java.util.logging.Logger.getLogger(FormLaporan.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (IllegalAccessException ex) {
-            java.util.logging.Logger.getLogger(FormLaporan.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (javax.swing.UnsupportedLookAndFeelException ex) {
-            java.util.logging.Logger.getLogger(FormLaporan.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        }
-        //</editor-fold>
-
-        /* Create and display the form */
-        java.awt.EventQueue.invokeLater(new Runnable() {
-            public void run() {
-                new FormLaporan().setVisible(true);
-            }
-        });
-    }
+   
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton btnExportAset;
     private javax.swing.JButton btnExportPeminjaman;
+    private javax.swing.JButton jButton1;
     private javax.swing.JLabel jLabel1;
+    private javax.swing.JLabel jLabel2;
     private javax.swing.JPanel jPanel1;
     // End of variables declaration//GEN-END:variables
 }
