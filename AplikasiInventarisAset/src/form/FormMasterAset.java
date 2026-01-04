@@ -97,7 +97,6 @@ public FormMasterAset() {
 
         lblHarga.setText("Harga");
 
-        btnUbah.setIcon(new javax.swing.ImageIcon(getClass().getResource("/form/icons/update.png"))); // NOI18N
         btnUbah.setText("Ubah");
         btnUbah.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -105,7 +104,6 @@ public FormMasterAset() {
             }
         });
 
-        btnTambah.setIcon(new javax.swing.ImageIcon(getClass().getResource("/form/icons/add.png"))); // NOI18N
         btnTambah.setText("Tambah");
         btnTambah.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -113,7 +111,6 @@ public FormMasterAset() {
             }
         });
 
-        btnHapus.setIcon(new javax.swing.ImageIcon(getClass().getResource("/form/icons/delete.png"))); // NOI18N
         btnHapus.setText("Hapus");
         btnHapus.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
