@@ -3,26 +3,31 @@ package form;
 import java.io.File;
 import java.io.FileWriter;
 import java.sql.*;
-import javax.swing.JFileChooser;
-import javax.swing.JOptionPane;
+import javax.swing.*;
 import java.awt.print.PrinterException;
 import java.text.MessageFormat;
-import javax.swing.JTable;
 import javax.swing.table.DefaultTableModel;
 
 public class FormLaporan extends javax.swing.JFrame {
 
-    // Tambahkan variabel JTable untuk preview
-    private javax.swing.JTable tabelPreview;
-    private javax.swing.JScrollPane scrollPreview;
+    // ==================== preview table ====================
+    private JTable tabelPreview;
+    private JScrollPane scrollPreview;
 
     public FormLaporan() {
         initComponents();
-        // Default load preview aset
-        loadPreviewAset();
+        initPreviewTable(); // buat tabel preview
+        loadPreviewAset();  // default preview aset
     }
 
     // ==================== METHOD PREVIEW ====================
+    private void initPreviewTable() {
+        tabelPreview = new JTable();
+        scrollPreview = new JScrollPane(tabelPreview);
+        scrollPreview.setBounds(20, 450, 700, 200); // posisi bawah UI, jangan ganggu layout
+        add(scrollPreview);
+    }
+
     private void loadPreviewAset() {
         try {
             DefaultTableModel model = new DefaultTableModel();
@@ -43,9 +48,10 @@ public class FormLaporan extends javax.swing.JFrame {
                     rs.getString("status")
                 });
             }
+
             tabelPreview.setModel(model);
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error load preview: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Error load preview aset: " + e.getMessage());
         }
     }
 
@@ -64,7 +70,8 @@ public class FormLaporan extends javax.swing.JFrame {
                 "SELECT p.id_peminjaman, a.nama_aset, pg.nama_pegawai, p.tgl_pinjam, p.status " +
                 "FROM tbl_peminjaman p " +
                 "JOIN tbl_aset a ON p.id_aset = a.id_aset " +
-                "JOIN tbl_pegawai pg ON p.id_pegawai = pg.id_pegawai"
+                "JOIN tbl_pegawai pg ON p.id_pegawai = pg.id_pegawai " +
+                "ORDER BY p.id_peminjaman DESC"
             );
 
             while (rs.next()) {
@@ -76,46 +83,40 @@ public class FormLaporan extends javax.swing.JFrame {
                     rs.getString("status")
                 });
             }
+
             tabelPreview.setModel(model);
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error load preview: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Error load preview peminjaman: " + e.getMessage());
         }
     }
-     // ==================== EXPORT ====================
+ // ==================== EXPORT ====================
     private void exportToExcel(String query, String filename) {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setSelectedFile(new File(filename + ".xls"));
-        int userSelection = fileChooser.showSaveDialog(this);
+        try {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setSelectedFile(new File(filename + ".xls"));
+            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                try (FileWriter fw = new FileWriter(fileChooser.getSelectedFile())) {
+                    Connection c = koneksi.Koneksi.getKoneksi();
+                    Statement s = c.createStatement();
+                    ResultSet rs = s.executeQuery(query);
+                    ResultSetMetaData metaData = rs.getMetaData();
+                    int columnCount = metaData.getColumnCount();
 
-        if (userSelection == JFileChooser.APPROVE_OPTION) {
-            try (FileWriter fw = new FileWriter(fileChooser.getSelectedFile())) {
-                Connection c = koneksi.Koneksi.getKoneksi();
-                Statement s = c.createStatement();
-                ResultSet rs = s.executeQuery(query);
-                ResultSetMetaData metaData = rs.getMetaData();
-                int columnCount = metaData.getColumnCount();
-
-                // Tulis Header
-                for (int i = 1; i <= columnCount; i++) {
-                    fw.write(metaData.getColumnName(i) + "\t");
-                }
-                fw.write("\n");
-
-                // Tulis Data
-                while (rs.next()) {
-                    for (int i = 1; i <= columnCount; i++) {
-                        fw.write(rs.getString(i) + "\t");
-                    }
+                    for (int i = 1; i <= columnCount; i++) fw.write(metaData.getColumnName(i) + "\t");
                     fw.write("\n");
+
+                    while (rs.next()) {
+                        for (int i = 1; i <= columnCount; i++) fw.write(rs.getString(i) + "\t");
+                        fw.write("\n");
+                    }
+                    JOptionPane.showMessageDialog(this, "Export Excel Berhasil!");
                 }
-                JOptionPane.showMessageDialog(this, "Export Excel Berhasil!");
-            } catch (Exception e) {
-                JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
             }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error export Excel: " + e.getMessage());
         }
     }
-
-    private void exportToPDF(String query, String title) {
+private void exportToPDF(String query, String title) {
         try {
             Connection c = koneksi.Koneksi.getKoneksi();
             Statement s = c.createStatement();
@@ -124,25 +125,17 @@ public class FormLaporan extends javax.swing.JFrame {
             int columnCount = metaData.getColumnCount();
 
             DefaultTableModel model = new DefaultTableModel();
-            for (int i = 1; i <= columnCount; i++) {
-                model.addColumn(metaData.getColumnLabel(i));
-            }
+            for (int i = 1; i <= columnCount; i++) model.addColumn(metaData.getColumnLabel(i));
             while (rs.next()) {
                 Object[] row = new Object[columnCount];
-                for (int i = 1; i <= columnCount; i++) {
-                    row[i - 1] = rs.getObject(i);
-                }
+                for (int i = 1; i <= columnCount; i++) row[i - 1] = rs.getObject(i);
                 model.addRow(row);
             }
 
             JTable tempTable = new JTable(model);
             MessageFormat header = new MessageFormat(title);
             MessageFormat footer = new MessageFormat("Halaman {0}");
-            boolean complete = tempTable.print(JTable.PrintMode.FIT_WIDTH, header, footer);
-
-            if (complete) {
-                JOptionPane.showMessageDialog(this, "Proses Cetak Selesai");
-            }
+            tempTable.print(JTable.PrintMode.FIT_WIDTH, header, footer);
         } catch (PrinterException | SQLException e) {
             JOptionPane.showMessageDialog(this, "Gagal mencetak: " + e.getMessage());
         }
@@ -253,34 +246,27 @@ public class FormLaporan extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void btnExportAsetActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportAsetActionPerformed
-     String sql = "SELECT id_aset AS ID, nama_aset AS Nama, kategori AS Kategori, status AS Status FROM tbl_aset";
-    String[] options = {"Excel (.xls)", "PDF (Print)"};
-    int choice = JOptionPane.showOptionDialog(this, "Pilih Format Laporan:", "Export Aset",
-                 JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
-
-    if (choice == 0) {
-        exportToExcel(sql, "Laporan_Aset");
-    } else if (choice == 1) {
-        exportToPDF(sql, "LAPORAN DATA ASET");
-    }
+      loadPreviewAset(); // pastikan preview terupdate
+        String sql = "SELECT id_aset AS ID, nama_aset AS Nama, kategori AS Kategori, status AS Status FROM tbl_aset";
+        String[] options = {"Excel (.xls)", "PDF (Print)"};
+        int choice = JOptionPane.showOptionDialog(this, "Pilih Format Laporan:", "Export Aset",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+        if (choice == 0) exportToExcel(sql, "Laporan_Aset");
+        else if (choice == 1) exportToPDF(sql, "LAPORAN DATA ASET");
     }//GEN-LAST:event_btnExportAsetActionPerformed
 
     private void btnExportPeminjamanActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportPeminjamanActionPerformed
-       String sql = "SELECT p.id_peminjaman AS ID, a.nama_aset AS Aset, pg.nama_pegawai AS Pegawai, "
-               + "p.tgl_pinjam AS 'Tgl Pinjam', p.status AS Status "
-               + "FROM tbl_peminjaman p "
-               + "JOIN tbl_aset a ON p.id_aset = a.id_aset "
-               + "JOIN tbl_pegawai pg ON p.id_pegawai = pg.id_pegawai";
-               
-    String[] options = {"Excel (.xls)", "PDF (Print)"};
-    int choice = JOptionPane.showOptionDialog(this, "Pilih Format Laporan:", "Export Peminjaman",
-                 JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
-
-    if (choice == 0) {
-        exportToExcel(sql, "Laporan_Peminjaman");
-    } else if (choice == 1) {
-        exportToPDF(sql, "LAPORAN PEMINJAMAN ASET");
-    }
+      loadPreviewPeminjaman(); // pastikan preview terupdate
+        String sql = "SELECT p.id_peminjaman AS ID, a.nama_aset AS Aset, pg.nama_pegawai AS Pegawai, "
+                   + "p.tgl_pinjam AS Tgl_Pinjam, p.status AS Status "
+                   + "FROM tbl_peminjaman p "
+                   + "JOIN tbl_aset a ON p.id_aset = a.id_aset "
+                   + "JOIN tbl_pegawai pg ON p.id_pegawai = pg.id_pegawai";
+        String[] options = {"Excel (.xls)", "PDF (Print)"};
+        int choice = JOptionPane.showOptionDialog(this, "Pilih Format Laporan:", "Export Peminjaman",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+        if (choice == 0) exportToExcel(sql, "Laporan_Peminjaman");
+        else if (choice == 1) exportToPDF(sql, "LAPORAN PEMINJAMAN ASET");
     }//GEN-LAST:event_btnExportPeminjamanActionPerformed
 
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
